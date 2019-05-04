@@ -16,9 +16,9 @@ link_directories( ${AVFORMAT_LIBRARY_DIRS})
 add_executable(y4mcreator y4mcreator.c)
 target_link_libraries(y4mcreator PUBLIC ${AVFORMAT_LIBRARIES})
 target_compile_options(y4mcreator PUBLIC ${AVFORMAT_CFLAGS})
-#target_link_libraries(y4mcreator PUBLIC ${AVFORMAT_LDFLAGS_OTHER})
 
-set_target_properties(y4mcreator PROPERTIES LINK_FLAGS "-L/usr/local/lib -lavformat -lm -lbz2 -lz -Wl,-framework,CoreFoundation -Wl,-framework,Security -lavcodec -liconv -lm -llzma -lz -framework AudioToolbox -pthread -framework VideoToolbox -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework CoreServices -lswresample -lm -lavutil -pthread -lm -framework VideoToolbox -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework CoreServices")
+#we are sending link flags directly and we need to substitute ';' for ' '. Cmake lists are ';' separated. 
+string (REPLACE ";" " " LD_FLAGS_STR "${AVFORMAT_LDFLAGS}")
+set_target_properties(y4mcreator PROPERTIES LINK_FLAGS "${LD_FLAGS_STR}" )
 
-#message( SEND_ERROR ${AVFORMAT_LDFLAGS} )
 
