@@ -130,7 +130,10 @@ AVFrame *avframe_heap_get_min( avframe_heap_t *h ) {
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// 
+//  AVFormat/AVCodec routines follow
+//
+//
+//
 typedef struct {
     AVFormatContext *inctx;
     AVFormatContext *outctx;
@@ -143,7 +146,9 @@ typedef struct {
 
 #define APPERROR -1
 
-// open input file and setup decoder
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// open input file, setup decoder. Will pick the first video stream available on input
+//
 static int open_input(app_ctx_t *ctx, const char *fname) {
     int ret;
     unsigned int i;
@@ -215,6 +220,10 @@ static int open_input(app_ctx_t *ctx, const char *fname) {
 }
 
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// open output file and setup y4m muxer. assumes only one video stream
+//
 static int open_output(app_ctx_t *ctx, const char *fname) {
     ctx->outctx = NULL;
     AVCodec *encoder;
@@ -235,7 +244,7 @@ static int open_output(app_ctx_t *ctx, const char *fname) {
     }
 
 
-    // allocate output stream for video of AV_CODEC_ID_RAWVIDEO type
+    // allocate output stream for video of AV_CODEC_ID_WRAPPED_AVFRAME type
     encoder = avcodec_find_encoder(AV_CODEC_ID_WRAPPED_AVFRAME);
     if(!encoder) {
         fprintf(stderr, "couldn't allocate encoder\n");
@@ -294,8 +303,9 @@ static int open_output(app_ctx_t *ctx, const char *fname) {
 
 }
 
-
-
+///////////////////////////////////////////////////////////////////////////////////////
+//  writes video frame to output muxer
+// 
 static int write_frame(app_ctx_t *ctx, AVFrame *frame) {
     AVPacket enc_packet;
     int got_frame;
@@ -316,12 +326,17 @@ static int write_frame(app_ctx_t *ctx, AVFrame *frame) {
     return ret;
 }
 
+
+///////////////////////////////////
+//  avframe_heap testing routines
+//
 AVFrame *test_alloc(int n) {
     AVFrame *r = av_frame_alloc();
     r->coded_picture_number = n;
     r->display_picture_number = n;
     return r;
 }
+
 void avframe_heap_testing() {
     avframe_heap_t *h = avframe_heap_create(NULL);
     avframe_heap_insert(h, test_alloc(3));
@@ -337,19 +352,38 @@ void avframe_heap_testing() {
     while(avframe_heap_peek_min(h)) {
         f = avframe_heap_get_min(h);
       printf("%d\n", f->coded_picture_number);
-        //av_frame_free(f);
+        av_frame_free(&f);
     }
     avframe_heap_destroy(h);
 }
 
-int main() {
-    int ret;
-    //const char *url = "file:in.mp4";
-    const char *urlout = "file:out.y4m";
-    const char *url = "http://storage.googleapis.com/vimeo-test/work-at-vimeo.mp4";
 
-    //avframe_heap_testing();
-    //return 0;
+///////////////////////////////////////////
+// main
+//
+// use debug flag to enable testing. It will exercise the heap testing routines. Also outputs
+// use coded_order=1 to output coded order [default]
+// 
+int main(int argc, char *argv[]) {
+    int ret;
+    char *urlout = "file:out.y4m";
+    char *url;
+    int debug = 0;
+
+    if(argc==1) {
+        printf("Usage: y4mcreator [file:input.mp4 | url] [out.mp4]\n");
+        return 0;
+    } else if(argc==2) {
+        url = argv[1];
+    } else if (argc==3) {
+        url = argv[1];
+        urlout = argv[2];
+    } else if (argc==4) {
+        url = argv[1];
+        urlout = argv[2];
+        debug = 1;
+    }
+
 
     app_ctx_t ctx;
     AVPacket packet = { .data=NULL, .size = 0 };
@@ -357,6 +391,9 @@ int main() {
     enum AVMediaType type;
     int isframe=0;
     AVFrame *frame=NULL;
+
+    if(debug)
+        avframe_heap_testing();
 
     if(open_input(&ctx, url)<0) {
         fprintf(stderr, "failed to open input\n");
@@ -369,27 +406,32 @@ int main() {
     }
 
     int i =0;
-    int coded_order = 0;  // switch to display either coded order or display order
+    int coded_order = 1;  // switch to display either coded order or display order
     int nextidx = 0;
 
 
+    // AVFrame heap creation
     avframe_heap_t *frame_heap = avframe_heap_create(coded_order ? avframe_heap_cmp_coded : avframe_heap_cmp_display );
   
+    // main loop
     while(1) {
+        // read data from demuxer
         if ((ret = av_read_frame(ctx.inctx, &packet))<0 )
             break;
         
         sidx = packet.stream_index;
         type = ctx.inctx->streams[sidx]->codecpar->codec_type;
 
-        // decode packet
+        // allocate AVFrame
         frame = av_frame_alloc();
         if(!frame) {
           ret = AVERROR(ENOMEM);
           break;
         }
 
+        // only deal with selected video track on input
         if( type==AVMEDIA_TYPE_VIDEO && sidx==ctx.vidstream_idx ) {
+            // decode video
             ret= avcodec_decode_video2( ctx.dec_ctx, frame, &isframe,  &packet);
             if(ret<0) {
                 av_frame_free(&frame);
@@ -398,6 +440,7 @@ int main() {
             }
 
 
+            // if frame was decoded push it onto the heap
             if(isframe) {
                 frame->width = ctx.enc_ctx->width;
                 frame->height = ctx.enc_ctx->height;
@@ -432,6 +475,9 @@ int main() {
                           av_frame_free(&m);
                           break;
                       }
+
+                      if(debug)
+                          printf("%d ", minidx);
 
                       nextidx++;
                       av_frame_free(&m);
