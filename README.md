@@ -62,6 +62,7 @@ There's a provided CMake configuration file to create a platform specific Makefi
 ## Known issues
 * Tool assumes first `coded_picture_number` is always 0
 * by default coded_order=1 . A recompile is necessary to get presentation order.
+* Maximum number of reference frames is hardcoded to 1000. We should investigate if this is sufficient.
 
 
 
