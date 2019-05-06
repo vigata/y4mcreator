@@ -371,7 +371,7 @@ int main(int argc, char *argv[]) {
     int debug = 0;
 
     if(argc==1) {
-        printf("Usage: y4mcreator [file:input.mp4 | url] [out.mp4]\n");
+        printf("Usage: y4mcreator [file:input.mp4 | url] [out.y4m]\n");
         return 0;
     } else if(argc==2) {
         url = argv[1];
